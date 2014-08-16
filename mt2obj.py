@@ -17,7 +17,7 @@ import getopt
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-
+#
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
@@ -316,14 +316,14 @@ colors = {
 
 optargs, args = getopt.getopt(sys.argv[1:], '')
 
-if len(args) <= 1:
+if len(args) < 1:
 	print("Usage: %s <.mts schematic>" % sys.argv[0])
 	print("Converts .mts schematics to Wavefront .obj geometry files")
 	print("")
 	print("Output files are written into directory where the source file lays.")
 	exit(1)
 else:
-	sch = open(sys.argv[1], "rb")
+	sch = open(args[0], "rb")
 	if sch.read(4) != b"MTSM":
 		print("This file does not look like an MTS schematic..")
 		exit(1)
@@ -344,7 +344,7 @@ else:
 	sch.close()
 	data = zlib.decompress(cdata)
 	del cdata
-	filepart = sys.argv[1][:sys.argv[1].find(".")]
+	filepart = args[0][:args[0].find(".")]
 	obj = open(filepart + ".obj", "w")
 	obj.write("# Exported by mt2obj\nmtllib %s\n\n\n" % (filepart + ".mtl", ))
 	i = 0
@@ -365,7 +365,6 @@ else:
 				else:
 					if not nname in foundnodes:
 						foundnodes.append(nname)
-					print(x, y, z, nname)
 				obj.write("o node%d\n" % i)
 				obj.write("usemtl %s\n" % nname.replace(":", "__"))
 				obj.write("v %f %f %f\n" % (x+1, y, z))
