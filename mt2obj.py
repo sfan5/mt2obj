@@ -188,7 +188,7 @@ else:
 				obj.write("usemtl %s\n" % nname.replace(":", "__"))
 				objd = open("models/" + nodetbl[nname][0] + ".obj", 'r')
 				tmp = parse_arglist(nodetbl[nname][4])
-				tmp['TEXTURES'] = str('-t' in optargs)
+				tmp['TEXTURES'] = str(('-t', '') in optargs)
 				ppctx = pp_new(tmp, strip_empty=True)
 				for line in objd:
 					line = pp_process(ppctx, line)
@@ -223,7 +223,7 @@ else:
 			'g': str(c[2]/255),
 			'b': str(c[3]/255),
 			'a': str(tmp1),
-			'TEXTURES': str('-t' in optargs),
+			'TEXTURES': str(('-t', '') in optargs),
 		}
 		tmp.update(parse_arglist(nodetbl[node][4]))
 		ppctx = pp_new(tmp, strip_empty=True)

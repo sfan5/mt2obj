@@ -3,14 +3,14 @@ Ks 0.0 0.0 0.0
 illum 1
 
 #if {TEXTURES}
-# Only the diffuse colors seems to have any effect, the ambient color stays white
-Kd {r} {g} {b}
-d {a}
-#else
 Kd 1.0 1.0 1.0
 d 1.0
 
 map_Ka {texture}
 map_Kd {texture}
+#else
+# Only the diffuse colors seems to have any effect, the ambient color stays white
+Kd {r} {g} {b}
+d {a}
 #endif
 
