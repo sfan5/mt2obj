@@ -3,6 +3,7 @@ import zlib
 import struct
 import sys
 import time
+import getopt
 
 # mt2obj - MTS schematic to OBJ converter
 # Copyright (C) 2014 sfan5
@@ -313,18 +314,22 @@ colors = {
 	"farming:cotton_8": (228, 226, 225),
 }
 
-if len(sys.argv) <= 1:
-	print("Usage: %s <input MTS schematic>" % sys.argv[0])
+optargs, args = getopt.getopt(sys.argv[1:], '')
+
+if len(args) <= 1:
+	print("Usage: %s <.mts schematic>" % sys.argv[0])
+	print("Converts .mts schematics to Wavefront .obj geometry files")
 	print("")
-	print("Output files are written into the current directory.")
+	print("Output files are written into directory where the source file lays.")
 	exit(1)
 else:
 	sch = open(sys.argv[1], "rb")
 	if sch.read(4) != b"MTSM":
 		print("This file does not look like an MTS schematic..")
 		exit(1)
-	if struct.unpack("!H", sch.read(2))[0] != 3:
-		print("Sorry. This MTS file is too old or too new")
+	v = struct.unpack("!H", sch.read(2))[0]
+	if v != 3:
+		print("Wrong file version: got %d, expected %d" % (v, 3))
 		exit(1)
 	width, height, depth = struct.unpack("!HHH", sch.read(6))
 	sch.seek(height, 1)
