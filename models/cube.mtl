@@ -1,0 +1,7 @@
+Ka 1.0 1.0 1.0
+# Only the diffuse colors seems to have any effect, the ambient color stays white
+Kd {r} {g} {b}
+Ks 0.0 0.0 0.0
+d {a}
+illum 1
+
