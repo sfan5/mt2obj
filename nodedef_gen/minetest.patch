@@ -1,0 +1,114 @@
+From e6e2c06760597fd712fe2cc7c56751bcb6a0036c Mon Sep 17 00:00:00 2001
+From: sfan5 <sfan5@live.de>
+Date: Fri, 3 Oct 2014 11:24:16 +0200
+Subject: [PATCH] Add minetest.generateAndSaveTexture
+
+---
+ src/game.cpp                  |  5 +++++
+ src/script/lua_api/l_util.cpp | 18 ++++++++++++++++++
+ src/script/lua_api/l_util.h   |  3 +++
+ src/tile.h                    |  1 +
+ 4 files changed, 27 insertions(+)
+
+diff --git a/src/game.cpp b/src/game.cpp
+index a8f6bc9..f4ef64f 100644
+--- a/src/game.cpp
++++ b/src/game.cpp
+@@ -1119,6 +1119,9 @@ static void updateChat(Client& client, f32 dtime, bool show_debug,
+ 			show_chat && recent_chat_count != 0 && !show_profiler);
+ }
+ 
++IWritableTextureSource *g_tsrc;
++video::IVideoDriver *g_driver;
++
+ /******************************************************************************/
+ void the_game(bool &kill, bool random_input, InputHandler *input,
+ 	IrrlichtDevice *device, gui::IGUIFont* font, std::string map_dir,
+@@ -1130,6 +1133,7 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
+ {
+ 	GUIFormSpecMenu* current_formspec = 0;
+ 	video::IVideoDriver* driver = device->getVideoDriver();
++	g_driver = driver;
+ 	scene::ISceneManager* smgr = device->getSceneManager();
+ 
+ 	// Calculate text height using the font
+@@ -1147,6 +1151,7 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
+ 
+ 	// Create texture source
+ 	IWritableTextureSource *tsrc = createTextureSource(device);
++	g_tsrc = tsrc;
+ 
+ 	// Create shader source
+ 	IWritableShaderSource *shsrc = createShaderSource(device);
+diff --git a/src/script/lua_api/l_util.cpp b/src/script/lua_api/l_util.cpp
+index eb6c183..91fe581 100644
+--- a/src/script/lua_api/l_util.cpp
++++ b/src/script/lua_api/l_util.cpp
+@@ -30,6 +30,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
+ #include "tool.h"
+ #include "filesys.h"
+ #include "settings.h"
++#include "tile.h"
+ #include "main.h"  //required for g_settings, g_settings_path
+ 
+ // debug(...)
+@@ -320,6 +321,21 @@ int ModApiUtil::l_decompress(lua_State *L)
+ 	return 1;
+ }
+ 
++extern IWritableTextureSource *g_tsrc;
++extern irr::video::IVideoDriver *g_driver;
++
++// generateAndSaveTexture(texture_name, out_filename)
++int ModApiUtil::l_generateAndSaveTexture(lua_State *L)
++{
++	std::string texname = luaL_checkstring(L, 1);
++	std::string outfile = luaL_checkstring(L, 2);
++
++	irr::video::IImage *img = g_tsrc->generateImage(texname);
++	g_driver->writeImageToFile(img, outfile.c_str());
++
++	return 0;
++}
++
+ void ModApiUtil::Initialize(lua_State *L, int top)
+ {
+ 	API_FCT(debug);
+@@ -345,6 +361,8 @@ void ModApiUtil::Initialize(lua_State *L, int top)
+ 
+ 	API_FCT(compress);
+ 	API_FCT(decompress);
++
++	API_FCT(generateAndSaveTexture);
+ }
+ 
+ void ModApiUtil::InitializeAsync(AsyncEngine& engine)
+diff --git a/src/script/lua_api/l_util.h b/src/script/lua_api/l_util.h
+index e824323..d656171 100644
+--- a/src/script/lua_api/l_util.h
++++ b/src/script/lua_api/l_util.h
+@@ -87,6 +87,9 @@ class ModApiUtil : public ModApiBase {
+ 	// decompress(data, method, ...)
+ 	static int l_decompress(lua_State *L);
+ 
++	// generateAndSaveTexture(texture_name, out_filename)
++	static int l_generateAndSaveTexture(lua_State *L);
++
+ public:
+ 	static void Initialize(lua_State *L, int top);
+ 
+diff --git a/src/tile.h b/src/tile.h
+index 78aaef0..7bd0b60 100644
+--- a/src/tile.h
++++ b/src/tile.h
+@@ -123,6 +123,7 @@ class IWritableTextureSource : public ITextureSource
+ 	virtual bool isKnownSourceImage(const std::string &name)=0;
+ 	virtual video::ITexture* generateTextureFromMesh(
+ 			const TextureFromMeshParams &params)=0;
++	virtual video::IImage* generateImage(const std::string &name)=0;
+ 
+ 	virtual void processQueue()=0;
+ 	virtual void insertSourceImage(const std::string &name, video::IImage *img)=0;
+-- 
+2.1.2
+
