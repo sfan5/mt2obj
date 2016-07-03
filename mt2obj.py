@@ -74,6 +74,16 @@ def pp_process(ctx, line):
 		else:
 			ctx[0]['if_state'] = 2 # ignore current lines, expecting #else or #endif
 		return None
+	elif line.startswith('#ifdef'): #e.g.: #ifdef name
+		tmp = line.split(' ')
+		if len(tmp) < 2:
+			raise Exception('Missing something..')
+		tmp = tmp[1]
+		if tmp in ctx[1].keys():
+			ctx[0]['if_state'] = 1 # don't ignore current lines, expecting #else or #endif
+		else:
+			ctx[0]['if_state'] = 2 # ignore current lines, expecting #else or #endif
+		return None
 	elif line.startswith('#else') and ctx[0]['if_state'] == 1:
 		ctx[0]['if_state'] = 4 # ignore current lines, expecting #endif
 	elif line.startswith('#else') and ctx[0]['if_state'] == 2:
