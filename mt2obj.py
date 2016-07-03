@@ -157,8 +157,8 @@ else:
 		print("This file does not look like an MTS schematic..")
 		exit(1)
 	v = struct.unpack("!H", sch.read(2))[0]
-	if v != 3:
-		print("Wrong file version: got %d, expected %d" % (v, 3))
+	if v != 4:
+		print("Wrong file version: got %d, expected %d" % (v, 4))
 		exit(1)
 	width, height, depth = struct.unpack("!HHH", sch.read(6))
 	sch.seek(height, 1)
