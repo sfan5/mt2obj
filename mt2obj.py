@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
-import zlib
-import struct
-import sys
-import time
-import getopt
-import re
-
 # mt2obj - MTS schematic to OBJ converter
-# Copyright (C) 2014 sfan5
+# Copyright (C) 2014-16 sfan5
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -22,6 +15,23 @@ import re
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+import zlib
+import struct
+import sys
+import time
+import getopt
+import re
+
+def str2bool(text):
+	return text.strip().lower() in ["1", "true", "yes"]
+
+def splitinto(text, delim, n):
+	ret = text.split(delim)
+	if len(ret) <= n:
+		return ret
+	else:
+		return ret[:n-1] + [delim.join(ret[n-1:]),]
 
 def convert(desc, vals):
 	out = tuple()
@@ -44,60 +54,9 @@ def convert(desc, vals):
 		elif c == 'h': # hexadecimal int
 			out += int(val, 16),
 		elif c == 'b': # bool
-			out += val.strip().lower() in ['1', 'true', 'yes'],
+			out += str2bool(val),
 		i += 1
 	return out
-			
-def pp_new(var, strip_empty=False):
-	return ({'if_state': 0, '_strip_empty': strip_empty}, var)
-
-def pp_process(ctx, line):
-	for k in ctx[1]:
-		line = line.replace('{' + k + '}', ctx[1][k])
-	if ctx[0]['_strip_empty'] and line.strip() == '':
-		return None
-	elif line.startswith('# '): # e.g.: # comment
-		return None
-	elif line.startswith('#define'): # e.g.: #define name value that may contain spaces
-		tmp = line.split(' ')
-		if len(tmp) < 3:
-			raise Exception('missing something...')
-		ctx[1][tmp[1]] = ' '.join(tmp[2:])[:-1] # [:-1] to cut off the \n at the end
-		return None
-	elif line.startswith('#if'): #e.g.: #if {name}
-		tmp = line.split(' ')
-		if len(tmp) < 2:
-			raise Exception('Missing something..')
-		tmp = tmp[1]
-		if tmp.strip().lower() in ['1', 'true', 'yes']:
-			ctx[0]['if_state'] = 1 # don't ignore current lines, expecting #else or #endif
-		else:
-			ctx[0]['if_state'] = 2 # ignore current lines, expecting #else or #endif
-		return None
-	elif line.startswith('#ifdef'): #e.g.: #ifdef name
-		tmp = line.split(' ')
-		if len(tmp) < 2:
-			raise Exception('Missing something..')
-		tmp = tmp[1]
-		if tmp in ctx[1].keys():
-			ctx[0]['if_state'] = 1 # don't ignore current lines, expecting #else or #endif
-		else:
-			ctx[0]['if_state'] = 2 # ignore current lines, expecting #else or #endif
-		return None
-	elif line.startswith('#else') and ctx[0]['if_state'] == 1:
-		ctx[0]['if_state'] = 4 # ignore current lines, expecting #endif
-	elif line.startswith('#else') and ctx[0]['if_state'] == 2:
-		ctx[0]['if_state'] = 3 # don't ignore current lines, expecting #endif
-	elif line.startswith('#endif'):
-		if ctx[0]['if_state'] not in [3, 4]:
-			raise Exception('stray #endif')
-		ctx[0]['if_state'] = 0 # no #if in sight
-	else:
-		if ctx[0]['if_state'] in [2, 4]:
-			pass # ignore, see above
-		else:
-			return line
-	return None
 
 def parse_arglist(s):
 	if s == ':':
@@ -128,7 +87,83 @@ def parse_arglist(s):
 	elif tmp1 != '' and state == 2:
 		out[tmp1] = tmp2
 	return out
-			
+
+class PreprocessingException(Exception):
+	pass
+
+class Preprocessor():
+	def __init__(self, omit_empty=False):
+		self.state = 0
+		# 0: default state
+		# 1: expecting #else or #endif
+		# 2: discard input, expecting #else or #endif
+		# 3: expecting #endif
+		# 4: discard input, expecting #endif
+		self.vars = {}
+		self.omit_empty = omit_empty
+	def _splitinto(self, text, delim, n):
+		r = splitinto(text, delim, n)
+		if len(r) < n:
+			raise PreprocessingException("Further input missing")
+	def _assertne(self, text):
+		if text.strip("\t ") == "":
+			raise PreprocessingException("Further input missing")
+	def setvar(self, var, value):
+		self.vars[var] = value
+	def getvar(self, var):
+		return self.vars[var]
+	def addvars(self, vars):
+		self.vars.update(vars)
+	def process(self, line):
+		# comments
+		if line.startswith("# "):
+			return None
+		# replacements
+		tmp = ""
+		last = 0
+		for m in re.finditer(r'{([a-zA-Z0-9_-]+)}', line):
+			name = m.group(1)
+			if name not in self.vars.keys():
+				tmp += line[last:m.start()] + "???"
+				last = m.end()
+				continue
+				#raise PreprocessingException("Undefined variable '%s'" % name)
+			tmp += line[last:m.start()] + self.vars[name]
+			last = m.end()
+		if len(tmp) > 0:
+			line = tmp
+		# omit empty
+		if self.omit_empty and line.strip("\t ") == "":
+			return None
+		# instructions
+		if line.startswith("#"):
+			inst = re.match(r'#([a-zA-Z0-9_]+)(?: (.*))?', line)
+			if inst is None:
+				raise PreprocessingException("Invalid syntax")
+			inst, args = inst.group(1), inst.group(2)
+			if inst == "define":
+				args = self._splitinto(args, " ", 2)
+				self.vars[args[0]] = args[1]
+				return None
+			elif inst == "if":
+				self._assertne(args)
+				self.state = 1 if str2bool(args) else 2
+			elif inst == "ifdef":
+				self._assertne(args)
+				self.state = 1 if args in self.vars.keys() else 2
+			elif inst == "else":
+				if self.state not in (1, 2):
+					raise PreprocessingException("Stray #else")
+				self.state = 4 if self.state == 1 else 3
+			elif inst == "endif":
+				if self.state not in (3, 4):
+					raise PreprocessingException("Stray #endif")
+				self.state = 0
+			return None
+		# normal lines
+		if self.state in (2, 4):
+			return None
+		return line
 
 nodetbl = {}
 
@@ -142,6 +177,7 @@ f.close()
 
 optargs, args = getopt.getopt(sys.argv[1:], 't')
 
+# TODO: structure code below
 if len(args) < 1:
 	print("Usage: %s <.mts schematic>" % sys.argv[0])
 	print("Converts .mts schematics to Wavefront .obj geometry files")
@@ -197,11 +233,11 @@ else:
 				obj.write("o node%d\n" % i)
 				obj.write("usemtl %s\n" % nname.replace(":", "__"))
 				objd = open("models/" + nodetbl[nname][0] + ".obj", 'r')
-				tmp = parse_arglist(nodetbl[nname][4])
-				tmp['TEXTURES'] = str(('-t', '') in optargs)
-				ppctx = pp_new(tmp, strip_empty=True)
+				pp = Preprocessor(omit_empty=True)
+				pp.addvars(parse_arglist(nodetbl[nname][4]))
+				pp.setvar("TEXTURES", str(('-t', '') in optargs))
 				for line in objd:
-					line = pp_process(ppctx, line)
+					line = pp.process(line[:-1])
 					if line is None:
 						continue
 					if line.startswith("v "):
@@ -210,39 +246,35 @@ else:
 						vx += x
 						vy += y
 						vz += z
-						obj.write("v %f %f %f\n" % (vx, vy, vz))
+						obj.write("v %.1f %.1f %.1f\n" % (vx, vy, vz))
 					else:
-						obj.write(line)
-				del ppctx
+						obj.write(line + "\n")
+				del pp
 				objd.close()
 				obj.write("\n")
 				i += 1
 	obj.close()
 	mtl = open(filepart + ".mtl", "w")
-	mtl.write("# Generated by mt2obj\n\n\n")
+	mtl.write("# Generated by mt2obj\n\n")
 	for node in foundnodes:
 		mtl.write("newmtl %s\n" % node.replace(":", "__"))
 		c = nodetbl[node]
 		mtld = open("models/" + nodetbl[node][0] + ".mtl", 'r')
-		if len(c) > 5: # if there is transparency
-			tmp1 = c[5]/255
-		else:
-			tmp1 = 1.0
-		tmp = {
+		pp = Preprocessor(omit_empty=True)
+		pp.addvars(parse_arglist(nodetbl[node][4]))
+		pp.addvars({
 			'r': str(c[1]/255),
 			'g': str(c[2]/255),
 			'b': str(c[3]/255),
-			'a': str(tmp1),
+			'a': str(c[5]/255 if len(c) > 5 else 1.0),
 			'TEXTURES': str(('-t', '') in optargs),
-		}
-		tmp.update(parse_arglist(nodetbl[node][4]))
-		ppctx = pp_new(tmp, strip_empty=True)
+		})
 		for line in mtld:
-			line = pp_process(ppctx, line)
+			line = pp.process(line[:-1])
 			if line is None:
 				continue
-			mtl.write(line)
-		del ppctx
+			mtl.write(line + "\n")
+		del pp
 		mtl.write("\n")
 		mtld.close()
 	mtl.close()
