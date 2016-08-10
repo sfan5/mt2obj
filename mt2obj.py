@@ -26,6 +26,12 @@ import re
 def str2bool(text):
 	return text.strip().lower() in ["1", "true", "yes"]
 
+def getarg(optargs, name, default=None):
+	for a in optargs:
+		if a[0] == name:
+			return a[1]
+	return default
+
 def splitinto(text, delim, n):
 	ret = text.split(delim)
 	if len(ret) <= n:
@@ -165,36 +171,40 @@ class Preprocessor():
 			return None
 		return line
 
+def usage():
+	print("Usage: %s <.mts schematic>" % sys.argv[0])
+	print("Converts .mts schematics to Wavefront .obj geometry files")
+	print("Output files are written into directory of source file.")
+	print("")
+	print("Options:")
+	print("  -t    Enable textures")
+	print("  -n    Set path to nodes.txt")
+	exit(1)
+
 nodetbl = {}
 
 r_entry = re.compile(r'^(\S+) (\S+) (\d+) (\d+) (\d+) (\S+)(?: (\d+))?$')
 
-f = open("nodes.txt", "r")
-for l in f:
-	m = r_entry.match(l)
-	nodetbl[m.group(1)] = convert('siiisi', m.groups()[1:])
-f.close()
-
-optargs, args = getopt.getopt(sys.argv[1:], 't')
+optargs, args = getopt.getopt(sys.argv[1:], 'tn:')
 
 # TODO: structure code below
 if len(args) < 1:
-	print("Usage: %s <.mts schematic>" % sys.argv[0])
-	print("Converts .mts schematics to Wavefront .obj geometry files")
-	print("")
-	print("Output files are written into directory of source file.")
-	print('')
-	print('Options:')
-	print('\t-t\t\tEnable textures')
-	exit(1)
-else:
+	usage()
+
+nodetbl = {}
+with open(getarg(optargs, "-n", default="nodes.txt"), "r") as f:
+	for line in f:
+		m = r_entry.match(line)
+		nodetbl[m.group(1)] = convert('siiisi', m.groups()[1:])
+
+if True:
 	sch = open(args[0], "rb")
 	if sch.read(4) != b"MTSM":
 		print("This file does not look like an MTS schematic..")
 		exit(1)
 	v = struct.unpack("!H", sch.read(2))[0]
-	if v != 4:
-		print("Wrong file version: got %d, expected %d" % (v, 4))
+	if v not in (3, 4):
+		print("Wrong file version: got %d, expected 3 or 4" % v)
 		exit(1)
 	width, height, depth = struct.unpack("!HHH", sch.read(6))
 	sch.seek(height, 1)
@@ -279,7 +289,7 @@ else:
 		mtld.close()
 	mtl.close()
 	if len(unknownnodes) > 0:
-		print("There were some unknown nodes that were ignored during the conversion:")
+		print("There were some unknown nodes that were ignored during conversion:")
 		for e in unknownnodes:
 			print(e)
 
