@@ -107,7 +107,7 @@ class MtsReader():
 			raise Exception("Incorrect magic value, this isn't a schematic!")
 		ver = struct.unpack("!H", f.read(2))[0]
 		if ver not in (3, 4):
-			raise Exception("Wrong file version: got %d, expected 3 or 4" % v)#
+			raise Exception("Wrong file version: got %d, expected 3 or 4" % ver)
 		self.dim = struct.unpack("!HHH", f.read(6))
 		f.seek(self.dim[1], 1) # skip some stuff
 		count = struct.unpack("!H", f.read(2))[0]
