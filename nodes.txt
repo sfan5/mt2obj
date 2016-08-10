@@ -150,7 +150,7 @@ default:lava_source cube 255 100 0 :
 default:goldblock cube 126 116 35 :
 default:obsidian_glass cube 16 17 17 : 64
 default:stone_with_copper cube 91 88 87 :
-default:grass_1 cube 72 109 32 :
+default:grass_1 plant 72 109 32 :
 default:papyrus cube 98 173 32 :
 default:ice cube 155 155 254 :
 default:wood cube 128 100 57 :
@@ -159,7 +159,7 @@ default:diamondblock cube 103 195 201 :
 default:coalblock cube 58 58 58 :
 default:stone_with_gold cube 91 88 87 :
 default:apple cube 50 0 0 :
-default:grass_4 cube 73 112 33 :
+default:grass_4 plant 73 112 33 :
 default:dirt_with_grass_footsteps cube 101 138 35 :
 default:desert_stonebrick cube 105 64 49 :
 default:cloud cube 255 255 255 :
@@ -191,18 +191,18 @@ default:dirt_with_grass cube 72 107 44 :
 default:brick cube 156 157 151 :
 default:junglegrass cube 82 133 35 :
 default:cobble cube 133 133 133 :
-default:grass_3 cube 71 109 32 :
+default:grass_3 plant 71 109 32 :
 default:stone cube 91 88 87 :
 default:sand cube 219 209 167 :
 default:obsidian cube 16 16 16 :
 default:bookshelf cube 128 100 57 :
 default:leaves cube 30 47 28 :
-default:grass_5 cube 73 112 33 :
+default:grass_5 plant 73 112 33 :
 default:ladder cube 153 109 39 :
 default:dirt cube 122 83 58 :
 default:mossycobble cube 102 116 85 :
 default:stone_with_diamond cube 91 88 87 :
-default:grass_2 cube 71 109 32 :
+default:grass_2 plant 71 109 32 :
 default:chest cube 238 219 171 :
 default:gravel cube 92 84 76 :
 default:torch cube 213 154 84 :
