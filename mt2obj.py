@@ -61,6 +61,8 @@ def convert(desc, vals):
 			out += int(val, 16),
 		elif c == 'b': # bool
 			out += str2bool(val),
+		elif c == 'A': # special: arglist
+			out += parse_arglist(val),
 		i += 1
 	return out
 
@@ -93,6 +95,32 @@ def parse_arglist(s):
 	elif tmp1 != '' and state == 2:
 		out[tmp1] = tmp2
 	return out
+
+class MtsReader():
+	def __init__(self):
+		self.dim = (0, 0, 0) # W x H x D
+		self.namemap = {}
+		self.data = b""
+	def decode(self, f):
+		assert(f.mode == "rb")
+		if f.read(4) != b"MTSM":
+			raise Exception("Incorrect magic value, this isn't a schematic!")
+		ver = struct.unpack("!H", f.read(2))[0]
+		if ver not in (3, 4):
+			raise Exception("Wrong file version: got %d, expected 3 or 4" % v)#
+		self.dim = struct.unpack("!HHH", f.read(6))
+		f.seek(self.dim[1], 1) # skip some stuff
+		count = struct.unpack("!H", f.read(2))[0]
+		for i in range(count):
+			l = struct.unpack("!H", f.read(2))[0]
+			self.namemap[i] = f.read(l).decode("ascii")
+		self.data = zlib.decompress(f.read())
+	def dimensions(self):
+		return self.dim
+	def getnode(self, x, y, z):
+		off = (x + y*self.dim[0] + z*self.dim[0]*self.dim[1]) * 2
+		nid = struct.unpack("!H", self.data[off:off+2])[0]
+		return self.namemap[nid]
 
 class PreprocessingException(Exception):
 	pass
@@ -130,6 +158,8 @@ class Preprocessor():
 		for m in re.finditer(r'{([a-zA-Z0-9_-]+)}', line):
 			name = m.group(1)
 			if name not in self.vars.keys():
+				# TODO: this is currently required as undefined vars can
+				#       occur in ifdef sections (which are processed later)
 				tmp += line[last:m.start()] + "???"
 				last = m.end()
 				continue
@@ -150,7 +180,6 @@ class Preprocessor():
 			if inst == "define":
 				args = self._splitinto(args, " ", 2)
 				self.vars[args[0]] = args[1]
-				return None
 			elif inst == "if":
 				self._assertne(args)
 				self.state = 1 if str2bool(args) else 2
@@ -181,115 +210,93 @@ def usage():
 	print("  -n    Set path to nodes.txt")
 	exit(1)
 
-nodetbl = {}
-
-r_entry = re.compile(r'^(\S+) (\S+) (\d+) (\d+) (\d+) (\S+)(?: (\d+))?$')
 
 optargs, args = getopt.getopt(sys.argv[1:], 'tn:')
-
-# TODO: structure code below
-if len(args) < 1:
+if len(args) != 1:
 	usage()
 
 nodetbl = {}
+r_entry = re.compile(r'(\S+) (\S+) (\d+) (\d+) (\d+) (\S+)(?: (\d+))?')
 with open(getarg(optargs, "-n", default="nodes.txt"), "r") as f:
 	for line in f:
 		m = r_entry.match(line)
-		nodetbl[m.group(1)] = convert('siiisi', m.groups()[1:])
+		nodetbl[m.group(1)] = convert('siiiAi', m.groups()[1:])
 
-if True:
-	sch = open(args[0], "rb")
-	if sch.read(4) != b"MTSM":
-		print("This file does not look like an MTS schematic..")
+schem = MtsReader()
+with open(args[0], "rb") as f:
+	try:
+		schem.decode(f)
+	except Exception as e:
+		print(str(e), file=sys.stderr)
 		exit(1)
-	v = struct.unpack("!H", sch.read(2))[0]
-	if v not in (3, 4):
-		print("Wrong file version: got %d, expected 3 or 4" % v)
-		exit(1)
-	width, height, depth = struct.unpack("!HHH", sch.read(6))
-	sch.seek(height, 1)
-	nodecount = struct.unpack("!H", sch.read(2))[0]
-	nodemap = {}
-	for i in range(nodecount):
-		l = struct.unpack("!H", sch.read(2))[0]
-		name = sch.read(l).decode('ascii')
-		nodemap[i] = name
-	# TODO use zlib.decompressobj() instead of decompressing everything at once
-	cdata = sch.read()
-	sch.close()
-	data = zlib.decompress(cdata)
-	del cdata
-	filepart = args[0][:args[0].find(".")]
-	obj = open(filepart + ".obj", "w")
-	obj.write("# Exported by mt2obj\nmtllib %s\n\n\n" % (filepart + ".mtl", ))
+
+filepart = ".".join(args[0].split(".")[:-1])
+objfile = filepart + ".obj"
+mtlfile = filepart + ".mtl"
+
+nodes_seen = set()
+with open(objfile, "w") as obj:
+	obj.write("# Exported by mt2obj (https://github.com/sfan5/mt2obj)\nmtllib %s\n\n\n" % mtlfile)
 	i = 0
-	foundnodes = []
-	unknownnodes = []
-	for x in range(width):
-		for y in range(height):
-			for z in range(depth):
-				off = (x + y*width + z*width*height) * 2
-				nid = struct.unpack("!H", data[off:off + 2])[0]
-				nname = nodemap[nid]
-				if nname == "air":
+	for x in range(schem.dimensions()[0]):
+		for y in range(schem.dimensions()[1]):
+			for z in range(schem.dimensions()[2]):
+				node = schem.getnode(x, y, z)
+				if node == "air":
 					continue
-				if not nname in nodetbl.keys():
-					if not nname in unknownnodes:
-						unknownnodes.append(nname)
+				nodes_seen.add(node)
+				if node not in nodetbl.keys():
 					continue
-				else:
-					if not nname in foundnodes:
-						foundnodes.append(nname)
-				obj.write("o node%d\n" % i)
-				obj.write("usemtl %s\n" % nname.replace(":", "__"))
-				objd = open("models/" + nodetbl[nname][0] + ".obj", 'r')
-				pp = Preprocessor(omit_empty=True)
-				pp.addvars(parse_arglist(nodetbl[nname][4]))
-				pp.setvar("TEXTURES", str(('-t', '') in optargs))
-				for line in objd:
-					line = pp.process(line[:-1])
-					if line is None:
-						continue
-					if line.startswith("v "):
-						tmp = line.split(" ")
-						vx, vy, vz = float(tmp[1]), float(tmp[2]), float(tmp[3])
-						vx += x
-						vy += y
-						vz += z
-						obj.write("v %.1f %.1f %.1f\n" % (vx, vy, vz))
-					else:
-						obj.write(line + "\n")
-				del pp
-				objd.close()
+				obj.write("o node%d\nusemtl %s\n" % (i, node.replace(":", "__")))
+				with open("models/%s.obj" % nodetbl[node][0], "r") as objdef:
+					pp = Preprocessor(omit_empty=True)
+					pp.addvars(nodetbl[node][4])
+					pp.setvar("TEXTURES", "1" if getarg(optargs, "-t") == "" else "0")
+					for line in objdef:
+						line = pp.process(line.rstrip("\r\n"))
+						if line is None:
+							continue
+						# Translate vertice coordinates
+						if line.startswith("v "):
+							vx, vy, vz = (float(e) for e in line.split(" ")[1:])
+							vx += x
+							vy += y
+							vz += z
+							obj.write("v %.1f %.1f %.1f\n" % (vx, vy, vz))
+						else:
+							obj.write(line)
+							obj.write("\n")
 				obj.write("\n")
 				i += 1
-	obj.close()
-	mtl = open(filepart + ".mtl", "w")
-	mtl.write("# Generated by mt2obj\n\n")
-	for node in foundnodes:
+
+with open(mtlfile, "w") as mtl:
+	mtl.write("# Generated by mt2obj (https://github.com/sfan5/mt2obj)\n\n")
+	for node in nodes_seen:
+		if node not in nodetbl.keys():
+			continue
 		mtl.write("newmtl %s\n" % node.replace(":", "__"))
 		c = nodetbl[node]
-		mtld = open("models/" + nodetbl[node][0] + ".mtl", 'r')
-		pp = Preprocessor(omit_empty=True)
-		pp.addvars(parse_arglist(nodetbl[node][4]))
-		pp.addvars({
-			'r': str(c[1]/255),
-			'g': str(c[2]/255),
-			'b': str(c[3]/255),
-			'a': str(c[5]/255 if len(c) > 5 else 1.0),
-			'TEXTURES': str(('-t', '') in optargs),
-		})
-		for line in mtld:
-			line = pp.process(line[:-1])
-			if line is None:
-				continue
-			mtl.write(line + "\n")
-		del pp
+		with open("models/%s.mtl" % c[0], "r") as mtldef:
+			pp = Preprocessor(omit_empty=True)
+			pp.addvars(c[4])
+			pp.addvars({
+				"r": str(c[1]/255),
+				"g": str(c[2]/255),
+				"b": str(c[3]/255),
+				"a": str(c[5]/255 if len(c) > 5 else 1.0),
+				"TEXTURES": "1" if getarg(optargs, "-t") == "" else "0",
+			})
+			for line in mtldef:
+				line = pp.process(line.rstrip("\r\n"))
+				if line is None:
+					continue
+				mtl.write(line + "\n")
 		mtl.write("\n")
-		mtld.close()
-	mtl.close()
-	if len(unknownnodes) > 0:
-		print("There were some unknown nodes that were ignored during conversion:")
-		for e in unknownnodes:
-			print(e)
+
+nodes_unknown = nodes_seen - set(nodetbl.keys())
+if len(nodes_unknown) > 0:
+	print("There were some unknown nodes that were ignored during conversion:")
+	for node in nodes_unknown:
+		print("  " + node)
+
 
