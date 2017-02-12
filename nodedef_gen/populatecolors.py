@@ -1,28 +1,26 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import sys
 from PIL import Image
 
-def avg2(a, b):
-	return int((a + b) / 2.0)
-
-def avg2t3i0(a, b):
-	return tuple(avg2(t[0], t[1]) for t in zip(a[:3], b[:3]))
+def mix(a, b):
+	return (
+		(a[0] + b[0]) / 2,
+		(a[1] + b[1]) / 2,
+		(a[2] + b[2]) / 2
+	)
 
 def avgcolor(name):
-	inp = Image.open(name)
-	inp = inp.convert('RGBA')
+	inp = Image.open(name).convert('RGBA')
 	ind = inp.load()
-	avgc = -1
+	avgc = None
 	for x in range(inp.size[0]):
 		for y in range(inp.size[1]):
 			pxl = ind[x, y]
 			if pxl[3] < 128:
 				continue
-			if avgc == -1:
-				avgc = pxl[:3]
-			else:
-				avgc = avg2t3i0(avgc, pxl)
-	if avgc == -1:
+			pxl = pxl[:3]
+			avgc = pxl if avgc is None else mix(avgc, pxl)
+	if avgc is None:
 		return "0 0 0"
 	else:
 		return "%d %d %d" % avgc
@@ -33,7 +31,7 @@ else:
 	fin = open(sys.argv[1], "r")
 	fout = open(sys.argv[2], "w")
 	for line in fin:
-		line = line[:-1] # cut off the \n
+		line = line.rstrip("\n")
 		# nodename modelname r g b params texture
 		#                    ^ ^ ^        ^^^^^^^
 		a = line.split(" ")
